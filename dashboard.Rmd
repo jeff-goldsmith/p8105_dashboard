@@ -5,11 +5,13 @@ output:
     orientation: columns
     vertical_layout: fill
     source: embed
+runtime: shiny
 ---
 
 ```{r setup, include=FALSE}
 library(tidyverse)
 library(p8105.datasets)
+library(leaflet)
 library(plotly)
 
 library(flexdashboard)
@@ -22,12 +24,37 @@ nyc_airbnb =
   nyc_airbnb %>% 
   mutate(rating = review_scores_location / 2) %>% 
   select(neighbourhood_group, neighbourhood, rating, price, room_type, lat, long) %>% 
-  filter(
-    neighbourhood_group == "Manhattan",
-    price %in% 100:500, 
-    room_type == "Entire home/apt"
-  ) %>% 
   drop_na(rating)
+```
+
+
+Column {.sidebar}
+-----------------------------------------------------------------------
+
+```{r}
+borough_choices = nyc_airbnb %>% pull(neighbourhood_group) %>% unique()
+
+selectInput(
+  "borough_choice",
+  h3("Borough Choice"),
+  choices = borough_choices,
+  selected = "Manhattan"
+)
+
+
+sliderInput(
+  "price_range",
+  h3("Price Range"),
+  100, 1000, 
+  value = c(100, 400))
+
+room_choices = nyc_airbnb %>% pull(room_type) %>% unique()
+
+radioButtons(
+  "room_choice",
+  h3("Room Type"),
+  choices = room_choices
+)
 ```
 
 
@@ -37,11 +64,20 @@ Column {data-width=650}
 ### Chart A
 
 ```{r}
-nyc_airbnb %>% 
-  mutate(text_label = str_c("Price: $", price, "\nRating: ", rating)) %>% 
-  plot_ly(
-    x = ~lat, y = ~long, color = ~price, text = ~text_label, 
-    alpha = .5, type = "scatter", mode = "markers")
+pal <- colorNumeric(
+  palette = "viridis",
+  domain = nyc_airbnb$stars)
+
+renderLeaflet({
+  nyc_airbnb %>% 
+  filter(
+      neighbourhood_group == input[["borough_choice"]],
+      price %in% input[["price_range"]][1]:input[["price_range"]][2],
+      room_type == input[["room_choice"]]) %>% 
+  leaflet() %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addCircleMarkers(~lat, ~long, radius = .1)
+})
 ```
 
 Column {data-width=350}
@@ -50,21 +86,33 @@ Column {data-width=350}
 ### Chart B
 
 ```{r}
+renderPlotly({
 nyc_airbnb %>% 
   mutate(neighbourhood = fct_reorder(neighbourhood, price)) %>% 
+  filter(
+      neighbourhood_group == input[["borough_choice"]],
+      price %in% input[["price_range"]][1]:input[["price_range"]][2],
+      room_type == input[["room_choice"]]) %>% 
   plot_ly(
     y = ~price, x = ~neighbourhood, color = ~neighbourhood,
     type = "box", colors = "viridis")
+})
 ```
 
 ### Chart C
 
 ```{r}
+renderPlotly({
 nyc_airbnb %>% 
+  filter(
+      neighbourhood_group == input[["borough_choice"]],
+      price %in% input[["price_range"]][1]:input[["price_range"]][2],
+      room_type == input[["room_choice"]]) %>% 
   count(neighbourhood) %>% 
   mutate(neighbourhood = fct_reorder(neighbourhood, n)) %>% 
   plot_ly(
-    x = ~neighbourhood, y = ~n, color = ~neighbourhood, 
-    type = "bar", colors = "viridis")
+  x = ~neighbourhood, y = ~n, color = ~neighbourhood, 
+  type = "bar", colors = "viridis")
+})
 ```
 
